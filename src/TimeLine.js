@@ -3,6 +3,7 @@ import d3Tip from 'd3-tip';
 import './style/tooltip.css'
 
 import Color from './timeLineColor';
+import { nest } from 'd3';
 
 const tip = d3Tip()
     .direction('s')
@@ -10,7 +11,7 @@ const tip = d3Tip()
 
 function generateToolTip(data) {
     return `<div class="tooltip">
-        <span class="tooltiptext">${data.name}<br>${data.startTime}<br>${data.endTime}</span>
+        <span class="tooltiptext">${data.actor}<br>${data.action.executer}<br>${data.startTime}<br>${data.endTime}</span>
         </div>`
 }
 
@@ -22,47 +23,71 @@ class TimeLine {
         this.timelineMargin = [30, 30, 30, 30];
     }
 
-    setTime(start, end) {
-        this.startTime = start;
-        this.endTime = end;
-        return this;
-    }
-
     setData(rawData) {
-        if (rawData.length == 0) { return }
-
-        let startTime = rawData[0].startTime;
-        let endTime = rawData[0].endTime;
-        rawData.forEach(ele => {
-            if (new Date(ele.startTime) < new Date(startTime)) {
-                startTime = new Date(ele.startTime);
-            }
-            if (new Date(ele.endTime) > new Date(endTime)) {
-                endTime = new Date(ele.endTime);
-            }
+        const data = rawData.map(report => {
+            const actor = report.actor;
+            return Object.assign({ actor }, this.formatData(report.data));
         });
-        this.data = this.formatData(rawData);
-        this.startTime = new Date(startTime);
-        this.endTime = new Date(endTime);
-        this.maxDuration = Math.floor((new Date(this.endTime) - new Date(this.startTime)) / 1000);
-
+        const max = data.reduce((max, current) => {
+            if (current.maxDuration > max.maxDuration) {
+                return current;
+            }
+            return max;
+        });
+        this.data = data;
+        this.startTime = max.startTime;
+        this.endTime = max.endTime;
+        this.maxDuration = max.maxDuration;
         return this;
     }
 
-    formatData(data) {
-        const v_date = new Date();
-        data.unshift({ base: 0, duration: 0, startTime: v_date, endTime: v_date });
-        let leftBase = 0;
-        let leftDuration = 0;
-        return data.map((ele, index) => {
-            const item = ele;
-            item.base = leftBase + leftDuration;
-            leftBase = item.base;
-            item.duration = Math.floor((new Date(item.endTime) - new Date(item.startTime)) / 1000);
-            leftDuration = item.duration
-            return item
-        }).slice(1)
+    formatData(rawData) {
+        function generateMetaInfo(data) {
+            let startTime = new Date(data[0].startTime);
+            let endTime = new Date(data[0].endTime);
+            data.forEach(ele => {
+                if (new Date(ele.startTime) < new Date(startTime)) {
+                    startTime = new Date(ele.startTime);
+                }
+                if (new Date(ele.endTime) > new Date(endTime)) {
+                    endTime = new Date(ele.endTime);
+                }
+            });
+            const maxDuration = Math.floor((new Date(endTime) - new Date(startTime)) / 1000);
+            return { startTime, endTime, maxDuration }
+        }
+
+        function tightTimeSequence(data) {
+            const tightTimeSequence = [data[0]];
+            data.slice(1).forEach(next => {
+                const last = tightTimeSequence[tightTimeSequence.length - 1];
+                if (new Date(last.endTime).getTime() != new Date(next.startTime).getTime()) {
+                    tightTimeSequence.push({ startTime: last.endTime, endTime: next.startTime, action: { executer: 'empty' } })
+                }
+                tightTimeSequence.push(next)
+            })
+            return tightTimeSequence;
+        }
+
+        function generateAreaInfo(data) {
+            const v_date = new Date();
+            data.unshift({ base: 0, duration: 0, startTime: v_date, endTime: v_date });
+            let leftBase = 0;
+            let leftDuration = 0;
+            return data.map((ele, index) => {
+                const item = ele;
+                item.base = leftBase + leftDuration;
+                leftBase = item.base;
+                item.duration = Math.floor((new Date(item.endTime) - new Date(item.startTime)) / 1000);
+                leftDuration = item.duration
+                return item
+            }).slice(1)
+        }
+        const meta = generateMetaInfo(rawData);
+        const data = generateAreaInfo(tightTimeSequence(rawData));
+        return Object.assign(meta, { data });
     }
+
     init() {
         d3.select('body').append('svg');
         const svg = d3.select('svg');
@@ -72,11 +97,17 @@ class TimeLine {
         svg.style('border', '1px solid');
         return svg;
     }
+
     show() {
+        // todo
+        // * the label of start time and end time
+
+        const data = this.data[0];
         const svg = this.init();
         const tip = d3Tip()
             .direction('s')
-            .attr('class', 'd3-tip').html(d => generateToolTip(d));
+            .attr('class', 'd3-tip')
+            .html(d => generateToolTip(Object.assign(d, { actor: data.actor })));
 
         const height = this.height;
         const width = this.width;
@@ -96,7 +127,7 @@ class TimeLine {
             .attr("transform", `translate(0,0)`)
             .call(temp)
         const timeLineXAxisHeight = timeLineXAxis.node().getBBox().height;
-        timeLineXAxis.attr("transform", `translate(0,${height-timeLineXAxisHeight})`)
+        timeLineXAxis.attr("transform", `translate(0,${height-timeLineXAxisHeight})`);
         const timeBlockScaler = d3.scaleLinear()
             .domain([0, this.maxDuration])
             .range([0, width]);
@@ -108,7 +139,7 @@ class TimeLine {
         function getWidth(d) {
             return timeBlockScaler(d.duration)
         }
-        const color = new Color();
+        const color = new Color({ empty: 'white' });
         const timeBlockHeight = 20;
         const timeBlockMarginBottom = 1;
         const timeBlockContainer = timeLineContainer
@@ -118,14 +149,14 @@ class TimeLine {
         timeBlockContainer.call(tip);
         timeBlockContainer
             .selectAll('svg')
-            .data(this.data)
+            .data(data.data)
             .enter()
             .append('rect')
             .attr('x', getXPos)
             .attr('width', getWidth)
             .attr('y', 0)
             .attr('height', timeBlockHeight)
-            .style('fill', d => color.getColor(d.name))
+            .style('fill', d => color.getColor(d.action.executer))
             .on('mouseover', tip.show)
             .on('mouseout', tip.hide)
 
