@@ -28,6 +28,6 @@ function getData(start, end) {
 const leftTime = 'Sun Dec 10 2017 18:47:46 GMT+0800';
 const rightTime = 'Sun Dec 10 2017 18:59:58 GMT+0800'
 
-new TimeLine(720, 50)
+new TimeLine(1000, 100)
     .setData(getData(leftTime, rightTime))
     .show()

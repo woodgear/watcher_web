@@ -18,6 +18,8 @@ class TimeLine {
     constructor(width, height) {
         this.width = width;
         this.height = height;
+        this.timeLabelDuration = 50; //interval per 50 px
+        this.timelineMargin = [30, 30, 30, 30];
     }
 
     setTime(start, end) {
@@ -40,8 +42,8 @@ class TimeLine {
             }
         });
         this.data = this.formatData(rawData);
-        this.startTime = startTime;
-        this.endTime = endTime;
+        this.startTime = new Date(startTime);
+        this.endTime = new Date(endTime);
         this.maxDuration = Math.floor((new Date(this.endTime) - new Date(this.startTime)) / 1000);
 
         return this;
@@ -72,28 +74,61 @@ class TimeLine {
     }
     show() {
         const svg = this.init();
-        const data = this.data;
-
-        const x = d3.scaleLinear()
-            .domain([0, this.maxDuration])
-            .range([0, this.width]);
         const tip = d3Tip()
             .direction('s')
             .attr('class', 'd3-tip').html(d => generateToolTip(d));
-        const rects = svg.selectAll('svg')
-            .data(data)
+
+        const height = this.height;
+        const width = this.width;
+        const timeLineContainer = svg.append("g")
+            .attr("transform", `translate(0,0)`)
+            .attr("class", "timeLineContainer")
+
+        const timeLineXAxisScaler = d3.scaleTime()
+            .domain([this.startTime, this.endTime])
+            .range([0, width]);
+
+        const temp = d3.axisBottom(timeLineXAxisScaler)
+            .ticks((width / this.timeLabelDuration));
+
+        const timeLineXAxis = timeLineContainer.append("g")
+            .attr("class", "axis")
+            .attr("transform", `translate(0,0)`)
+            .call(temp)
+        const timeLineXAxisHeight = timeLineXAxis.node().getBBox().height;
+        timeLineXAxis.attr("transform", `translate(0,${height-timeLineXAxisHeight})`)
+        const timeBlockScaler = d3.scaleLinear()
+            .domain([0, this.maxDuration])
+            .range([0, width]);
+
+        function getXPos(d, i) {
+            return timeBlockScaler(d.base)
+        }
+
+        function getWidth(d) {
+            return timeBlockScaler(d.duration)
+        }
+        const color = new Color();
+        const timeBlockHeight = 20;
+        const timeBlockMarginBottom = 1;
+        const timeBlockContainer = timeLineContainer
+            .append('g')
+            .attr('class', 'timeBlockContainer')
+            .attr('transform', `translate(0,${(height-timeLineXAxisHeight-timeBlockHeight-timeBlockMarginBottom)})`);
+        timeBlockContainer.call(tip);
+        timeBlockContainer
+            .selectAll('svg')
+            .data(this.data)
             .enter()
             .append('rect')
-
-        const color = new Color();
-        rects.call(tip)
-        rects
-            .attr('x', d => x(d.base))
-            .attr('width', d => x(d.duration))
-            .attr('height', this.height)
+            .attr('x', getXPos)
+            .attr('width', getWidth)
+            .attr('y', 0)
+            .attr('height', timeBlockHeight)
             .style('fill', d => color.getColor(d.name))
             .on('mouseover', tip.show)
             .on('mouseout', tip.hide)
+
     }
 }
 
