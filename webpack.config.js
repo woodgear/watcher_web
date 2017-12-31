@@ -27,5 +27,17 @@ module.exports = {
         }]
 
     },
-    plugins: [HtmlWebpackPluginConfig]
+    plugins: [HtmlWebpackPluginConfig],
+    node: {
+        net: 'empty',
+        fs: 'empty',
+        tls: 'empty',
+        console: false,
+        global: true,
+        process: true,
+        Buffer: true,
+        __filename: "mock",
+        __dirname: "mock",
+        setImmediate: true
+    }
 }

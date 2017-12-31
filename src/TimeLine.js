@@ -19,11 +19,27 @@ class TimeLine {
     constructor(width, height) {
         this.width = width;
         this.height = height;
-        this.timeLabelDuration = 50; //interval per 50 px
-        this.timelineMargin = [30, 30, 30, 30];
+        this.timeLabelDuration = 50; //time interval per 50 px
+        this.padding = {
+            left: 30,
+            right: 30,
+            top: 10,
+            bottom: 0,
+        };
+        this.timeBlockHeight = 20;
+        this.timeBlockMarginBottom = 1;
     }
 
     setData(rawData) {
+        function checkData(rawData) {
+            if (rawData.length == 0) {
+                throw Error("could not get any actor")
+            }
+            if (rawData[0].data.length == 0) {
+                throw Error(`could not get any time block data from actor ${rawData[0].actor}`)
+            }
+        }
+        checkData(rawData);
         const data = rawData.map(report => {
             const actor = report.actor;
             return Object.assign({ actor }, this.formatData(report.data));
@@ -83,37 +99,47 @@ class TimeLine {
                 return item
             }).slice(1)
         }
-        const meta = generateMetaInfo(rawData);
-        const data = generateAreaInfo(tightTimeSequence(rawData));
+
+        function formatRawData(data) {
+            return data.map((item) => {
+                return {
+                    startTime: item.startTime,
+                    endTime: item.endTime,
+                    action: {
+                        executer: item.name,
+                        path: item.path
+                    }
+                }
+            })
+        }
+        const formatdData = formatRawData(rawData);
+        const meta = generateMetaInfo(formatdData);
+        const data = generateAreaInfo(tightTimeSequence(formatdData));
         return Object.assign(meta, { data });
     }
 
     init() {
+        d3.select('.d3-timeline').remove();
         d3.select('body').append('svg');
-        const svg = d3.select('svg');
-        svg.attr('width', this.width);
-        svg.attr('height', this.height);
-        svg.attr('class', 'd3-timeline');
-        svg.style('border', '1px solid');
+        const svg = d3.select('svg')
+            .attr('width', this.width)
+            .attr('height', this.height)
+            .attr('class', 'd3-timeline')
+            .style('border', '1px solid');
         return svg;
     }
 
     show() {
-        // todo
-        // * the label of start time and end time
-
-        const data = this.data[0];
         const svg = this.init();
-        const tip = d3Tip()
-            .direction('s')
-            .attr('class', 'd3-tip')
-            .html(d => generateToolTip(Object.assign(d, { actor: data.actor })));
+        const data = this.data[0];
 
-        const height = this.height;
-        const width = this.width;
-        const timeLineContainer = svg.append("g")
-            .attr("transform", `translate(0,0)`)
-            .attr("class", "timeLineContainer")
+        const height = this.height - this.padding.top - this.padding.bottom;
+        const width = this.width - this.padding.left - this.padding.right;
+
+        const timeLineContainer = svg
+            .append('g')
+            .attr('class', 'timelineContainer')
+            .attr("transform", `translate(${this.padding.left}, ${this.padding.top})`)
 
         const timeLineXAxisScaler = d3.scaleTime()
             .domain([this.startTime, this.endTime])
@@ -123,11 +149,13 @@ class TimeLine {
             .ticks((width / this.timeLabelDuration));
 
         const timeLineXAxis = timeLineContainer.append("g")
-            .attr("class", "axis")
-            .attr("transform", `translate(0,0)`)
+            .attr("class", "xaxis")
             .call(temp)
+
         const timeLineXAxisHeight = timeLineXAxis.node().getBBox().height;
         timeLineXAxis.attr("transform", `translate(0,${height-timeLineXAxisHeight})`);
+
+
         const timeBlockScaler = d3.scaleLinear()
             .domain([0, this.maxDuration])
             .range([0, width]);
@@ -139,27 +167,40 @@ class TimeLine {
         function getWidth(d) {
             return timeBlockScaler(d.duration)
         }
+
         const color = new Color({ empty: 'white' });
-        const timeBlockHeight = 20;
-        const timeBlockMarginBottom = 1;
+
         const timeBlockContainer = timeLineContainer
             .append('g')
-            .attr('class', 'timeBlockContainer')
-            .attr('transform', `translate(0,${(height-timeLineXAxisHeight-timeBlockHeight-timeBlockMarginBottom)})`);
-        timeBlockContainer.call(tip);
-        timeBlockContainer
-            .selectAll('svg')
-            .data(data.data)
-            .enter()
-            .append('rect')
-            .attr('x', getXPos)
-            .attr('width', getWidth)
-            .attr('y', 0)
-            .attr('height', timeBlockHeight)
-            .style('fill', d => color.getColor(d.action.executer))
-            .on('mouseover', tip.show)
-            .on('mouseout', tip.hide)
+            .attr('class', 'timeBlockContainer');
 
+        this.data.forEach((actor, index) => {
+            const actorYPos = height - timeLineXAxisHeight - (this.timeBlockHeight + this.timeBlockMarginBottom) * (index + 1);
+            const actorBlockContainer = timeBlockContainer
+                .append('g')
+                .attr('class', 'actorBlockContainer')
+                .attr('transform', `translate(0,${actorYPos})`);
+
+            const tip = d3Tip()
+                .direction('s')
+                .attr('class', 'd3-tip')
+                .html(d => generateToolTip(Object.assign(d, { actor: actor.actor })));
+
+            actorBlockContainer.call(tip);
+            actorBlockContainer
+                .selectAll('svg')
+                .data(actor.data)
+                .enter()
+                .append('rect')
+                .attr('x', getXPos)
+                .attr('width', getWidth)
+                .attr('y', 0)
+                .attr('height', this.timeBlockHeight)
+                .style('fill', d => color.getColor(d.action.executer))
+                .on('mouseover', tip.show)
+                .on('mouseout', tip.hide);
+        });
+        svg.exit().remove()
     }
 }
 

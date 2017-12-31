@@ -1,49 +1,67 @@
 import './style/main.css'
+import config from './config';
 import TimeLine from './TimeLine'
+import rp from 'request-promise';
+import parseDuration from './humanTime';
+import qs from 'querystring'
 
-function getData(start, end) {
-    const rawData = [{
-        actor: 'windows',
-        data: [{
-                startTime: "Sun Dec 10 2017 0:00:00 GMT+0800",
-                endTime: "Sun Dec 10 2017 0:30:00 GMT+0800",
-                action: {
-                    executer: "chrome.exe",
-                    tile: "ECharts Documentation - Google Chrome",
-                },
-            },
-            {
-                startTime: "Sun Dec 10 2017 0:30:00 GMT+0800",
-                endTime: "Sun Dec 10 2017 01:00:00 GMT+0800",
-                action: {
-                    tile: "main.rs",
-                    executer: "code.exe",
-                }
-            },
-            {
-                startTime: "Sun Dec 10 2017 01:00:00 GMT+0800",
-                endTime: "Sun Dec 10 2017 02:00:00 GMT+0800",
-                action: {
-                    tile: "main.rs",
-                    executer: "notepad.exe",
-                }
-            },
-            {
-                startTime: "Sun Dec 10 2017 03:00:00 GMT+0800",
-                endTime: "Sun Dec 10 2017  10:00:00 GMT+0800",
-                action: {
-                    tile: "main.rs",
-                    executer: "wireshark.exe",
-                }
-            },
-        ]
-    }]
-    return rawData;
+async function getData(left, right) {
+    const url = `${config.serverHost}/api/v1/reporter/windows?${qs.stringify({left:left.toUTCString(),right:right.toUTCString()})}`;
+    console.log(url);
+    const option = {
+        json: true,
+        url: url,
+        headers: {
+            id: '{eb544d36-03a6-481a-9367-7010ddc9ef19}',
+        }
+    };
+    const res = await rp.get(option);
+    console.log(res);
+    return res
 }
 
-const leftTime = 'Sun Dec 10 2017 0:00:00 GMT+0800';
-const rightTime = 'Sun Dec 10 2017 10:00:00 GMT+0800'
+async function show() {
+    const data = await getData(leftTime, rightTime);
+    new TimeLine(1000, 200)
+        .setData(data)
+        .show()
+}
 
-new TimeLine(720, 100)
-    .setData(getData(leftTime, rightTime))
-    .show()
+let leftTime = new Date(0);
+let rightTime = new Date();
+
+function setTimeRange(timeRange) {
+    if (timeRange) {
+        if (timeRange === "all") {
+            leftTime = new Date(0);
+            rightTime = new Date();
+        } else {
+            let duration = parseDuration(timeRange);
+            if (duration != 0) {
+                leftTime = new Date(new Date() - duration);
+                rightTime = new Date(new Date());
+            } else {
+                console.error("could not parser this duaration please format as ISO_8601");
+            }
+        }
+    }
+    show()
+}
+
+show()
+
+setInterval(async() => {
+    show()
+}, 1000 * 10);
+
+const form = document.createElement("div");
+const input = document.createElement("input");
+const confirm = document.createElement("button");
+confirm.innerHTML = 'current';
+confirm.addEventListener('click', () => {
+    const timeRange = input.value;
+    setTimeRange(timeRange);
+});
+form.appendChild(input);
+form.appendChild(confirm);
+document.body.appendChild(form);
