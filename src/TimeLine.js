@@ -10,8 +10,12 @@ const tip = d3Tip()
     .attr('class', 'd3-tip').html(d => generateToolTip(d));
 
 function generateToolTip(data) {
+    let msg = "";
+    Object.entries(data.action).forEach(([key, value]) => {
+        msg += `${value}<br>`
+    });
     return `<div class="tooltip">
-        <span class="tooltiptext">${data.actor}<br>${data.action.executer}<br>${data.startTime}<br>${data.endTime}</span>
+        <span class="tooltiptext">${msg}</span>
         </div>`
 }
 
@@ -61,6 +65,7 @@ class TimeLine {
         function generateMetaInfo(data) {
             let startTime = new Date(data[0].startTime);
             let endTime = new Date(data[0].endTime);
+
             data.forEach(ele => {
                 if (new Date(ele.startTime) < new Date(startTime)) {
                     startTime = new Date(ele.startTime);
@@ -102,19 +107,27 @@ class TimeLine {
 
         function formatRawData(data) {
             return data.map((item) => {
+                const startTime = item.startTime;
+                const endTime = item.endTime;
+                delete item.startTime;
+                delete item.endTime;
+                const action = item;
+                action.executer = action.name;
                 return {
-                    startTime: item.startTime,
-                    endTime: item.endTime,
-                    action: {
-                        executer: item.name,
-                        path: item.path
-                    }
+                    startTime: startTime,
+                    endTime: endTime,
+                    action
                 }
-            })
+            });
         }
         const formatdData = formatRawData(rawData);
+
         const meta = generateMetaInfo(formatdData);
-        const data = generateAreaInfo(tightTimeSequence(formatdData));
+        let data = generateAreaInfo(tightTimeSequence(formatdData));
+        data = data.filter((x) => {
+            return x.action.duration >= 0
+        });
+
         return Object.assign(meta, { data });
     }
 

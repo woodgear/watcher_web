@@ -7,7 +7,6 @@ import qs from 'querystring'
 
 async function getData(left, right) {
     const url = `${config.serverHost}/api/v1/reporter/windows?${qs.stringify({left:left.toUTCString(),right:right.toUTCString()})}`;
-    console.log(url);
     const option = {
         json: true,
         url: url,
@@ -16,7 +15,6 @@ async function getData(left, right) {
         }
     };
     const res = await rp.get(option);
-    console.log(res);
     return res
 }
 
